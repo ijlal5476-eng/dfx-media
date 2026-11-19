@@ -215,19 +215,38 @@ footer{padding:28px 0 40px;margin-top:36px;border-top:1px solid var(--line);colo
 *,*::before,*::after{-webkit-tap-highlight-color:transparent}
 button,a{-webkit-user-select:none;user-select:none;outline:none}
 button:focus:not(:focus-visible),a:focus:not(:focus-visible){outline:none}
+
+/* Intro: full-screen logo animation, then it flies to the header */
+#intro{position:fixed;inset:0;z-index:200;pointer-events:none}
+.intro-bg{position:absolute;inset:0;background:#0b0b0c;transition:opacity .9s ease}
+.intro-bg.hide{opacity:0}
+.intro-lk{position:fixed;left:0;top:0;transform-origin:0 0;transform:scale(.6)}
+.page{transition:opacity .9s ease .25s}
+.page.pre{opacity:0}
+body.intro-on .lockup-wrap .lockup{visibility:hidden}
 </style>
 </head>
-<body>
+<body class="intro-on">
+<div id="intro" aria-hidden="true">
+  <div class="intro-bg" id="intro-bg"></div>
+  <div class="lockup intro-lk" id="intro-lk">
+    <div class="lk-morph"><div class="lk-dfx">Dfx</div></div>
+    <div class="lk-dot"></div>
+    <div class="lk-ring"></div>
+    <div class="lk-media"><span>M</span><span>e</span><span>d</span><span>i</span><span>a</span></div>
+    <div class="lk-dotend"></div>
+  </div>
+</div>
 
 <header class="topbar">
   <div class="topbar-in">
     <a class="lockup-wrap" href="#top" aria-label="DFX Media" title="DFX Media">
-      <div class="lockup" id="lk">
-        <div class="lk-morph" id="lk-morph"><div class="lk-dfx" id="lk-dfx">Dfx</div></div>
-        <div class="lk-dot" id="lk-dot"></div>
-        <div class="lk-ring" id="lk-ring"></div>
-        <div class="lk-media" id="lk-media"><span>M</span><span>e</span><span>d</span><span>i</span><span>a</span></div>
-        <div class="lk-dotend" id="lk-dotend"></div>
+      <div class="lockup">
+        <div class="lk-morph"><div class="lk-dfx">Dfx</div></div>
+        <div class="lk-dot"></div>
+        <div class="lk-ring"></div>
+        <div class="lk-media"><span>M</span><span>e</span><span>d</span><span>i</span><span>a</span></div>
+        <div class="lk-dotend"></div>
       </div>
     </a>
     <button class="menu-btn" id="menuBtn" aria-label="Menu" aria-expanded="false" aria-controls="menu" onclick="toggleMenu()">
@@ -431,75 +450,126 @@ function toggleSub(btn,id){
   btn.setAttribute('aria-expanded',String(open));
 }
 
-/* Header logo animation */
+/* Logo animation controller (used by the header and the intro) */
 (function(){
   const F={L:37,T:50,W:440,H:200,R:34};
-  const CX=550,CY=150;
-  const $=id=>document.getElementById(id);
-  const morph=$('lk-morph'),dot=$('lk-dot'),ring=$('lk-ring'),dfx=$('lk-dfx'),dotEnd=$('lk-dotend'),media=$('lk-media');
-  const mspans=[...media.querySelectorAll('span')];
-  const MEDIA_L=F.L+F.W+34;
-  media.style.left=MEDIA_L+'px';
+  const CX=550,CY=150,DUR=3.2;
+  const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const seg=(t,a,b)=>Math.min(1,Math.max(0,(t-a)/(b-a)));
   const eOut=x=>1-Math.pow(1-x,3);
   const eInOut=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
   const eBack=x=>{const c=1.5;return 1+(c+1)*Math.pow(x-1,3)+c*Math.pow(x-1,2);};
   const lerp=(a,b,p)=>a+(b-a)*p;
-  function setT(t){
-    const d1=eBack(seg(t,0,0.28));
-    dot.style.transform=`translate(-50%,-50%) scale(${Math.max(0,d1)})`;
-    dot.style.opacity=1-seg(t,0.3,0.5);
-    const rg=eOut(seg(t,0.28,0.85));
-    const rd=lerp(0,300,rg);
-    ring.style.width=rd+'px';ring.style.height=rd+'px';
-    ring.style.borderWidth=lerp(16,6,rg)+'px';
-    ring.style.opacity=(t<0.25)?0:(1-seg(t,0.7,0.95));
-    const m=seg(t,0.8,1.85),me=eInOut(m),op=seg(t,0.8,0.95),sd=60;
-    morph.style.opacity=op;
-    morph.style.left=lerp(CX-sd/2,F.L,me)+'px';
-    morph.style.top=lerp(CY-sd/2,F.T,me)+'px';
-    morph.style.width=lerp(sd,F.W,me)+'px';
-    morph.style.height=lerp(sd,F.H,me)+'px';
-    morph.style.borderRadius=lerp(sd/2,F.R,me)+'px';
-    const dp=eOut(seg(t,1.55,2.05));
-    dfx.style.opacity=dp;
-    dfx.style.transform=`translateX(${(1-dp)*-40}px)`;
-    dfx.style.filter=`blur(${(1-dp)*10}px)`;
-    mspans.forEach((el,i)=>{
-      const p=eOut(seg(t,1.75+i*0.1,2.25+i*0.1));
-      el.style.opacity=p;
-      el.style.transform=`translateX(${(1-p)*-60}px)`;
-      el.style.filter=`blur(${(1-p)*10}px)`;
-    });
-    const de=eBack(seg(t,2.45,2.85));
-    const mw=media.getBoundingClientRect().width/ (document.getElementById('lk').getBoundingClientRect().width/1100||1);
-    dotEnd.style.left=(MEDIA_L+mw+14)+'px';
-    dotEnd.style.transform=`translateY(-50%) scale(${Math.max(0,de)})`;
+
+  function controller(root){
+    const $c=c=>root.querySelector('.'+c);
+    const morph=$c('lk-morph'),dot=$c('lk-dot'),ring=$c('lk-ring'),dfx=$c('lk-dfx'),dotEnd=$c('lk-dotend'),media=$c('lk-media');
+    const mspans=[...media.querySelectorAll('span')];
+    const MEDIA_L=F.L+F.W+34;
+    media.style.left=MEDIA_L+'px';
+    function setT(t){
+      const d1=eBack(seg(t,0,0.28));
+      dot.style.transform=`translate(-50%,-50%) scale(${Math.max(0,d1)})`;
+      dot.style.opacity=1-seg(t,0.3,0.5);
+      const rg=eOut(seg(t,0.28,0.85));
+      const rd=lerp(0,300,rg);
+      ring.style.width=rd+'px';ring.style.height=rd+'px';
+      ring.style.borderWidth=lerp(16,6,rg)+'px';
+      ring.style.opacity=(t<0.25)?0:(1-seg(t,0.7,0.95));
+      const m=seg(t,0.8,1.85),me=eInOut(m),op=seg(t,0.8,0.95),sd=60;
+      morph.style.opacity=op;
+      morph.style.left=lerp(CX-sd/2,F.L,me)+'px';
+      morph.style.top=lerp(CY-sd/2,F.T,me)+'px';
+      morph.style.width=lerp(sd,F.W,me)+'px';
+      morph.style.height=lerp(sd,F.H,me)+'px';
+      morph.style.borderRadius=lerp(sd/2,F.R,me)+'px';
+      const dp=eOut(seg(t,1.55,2.05));
+      dfx.style.opacity=dp;
+      dfx.style.transform=`translateX(${(1-dp)*-40}px)`;
+      dfx.style.filter=`blur(${(1-dp)*10}px)`;
+      mspans.forEach((el,i)=>{
+        const p=eOut(seg(t,1.75+i*0.1,2.25+i*0.1));
+        el.style.opacity=p;
+        el.style.transform=`translateX(${(1-p)*-60}px)`;
+        el.style.filter=`blur(${(1-p)*10}px)`;
+      });
+      const de=eBack(seg(t,2.45,2.85));
+      const sc=root.getBoundingClientRect().width/1100||1;
+      const mw=media.getBoundingClientRect().width/sc;
+      dotEnd.style.left=(MEDIA_L+mw+14)+'px';
+      dotEnd.style.transform=`translateY(-50%) scale(${Math.max(0,de)})`;
+    }
+    return {setT};
   }
-  const DUR=3.2;
+
+  function animate(ctrl,onDone){
+    const start=performance.now();
+    function f(now){
+      const t=(now-start)/1000;
+      ctrl.setT(Math.min(t,DUR));
+      if(t<DUR)requestAnimationFrame(f);else if(onDone)onDone();
+    }
+    requestAnimationFrame(f);
+  }
+
+  // Header logo: static final state; replays only on touch or hover
+  const headerRoot=document.querySelector('.lockup-wrap .lockup');
+  const hdr=controller(headerRoot);
+  hdr.setT(DUR);
+  let hdrRunning=false;
+  function playHeader(){
+    if(hdrRunning||reduce)return;
+    hdrRunning=true;
+    animate(hdr,()=>{hdrRunning=false;});
+  }
   const wrap=document.querySelector('.lockup-wrap');
-  const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let running=false,startT=0;
-  function frame(now){
-    const t=(now-startT)/1000;
-    setT(Math.min(t,DUR));
-    if(t<DUR){requestAnimationFrame(frame);}
-    else{running=false;}
-  }
-  function play(){
-    if(running||reduce)return;
-    running=true;
-    startT=performance.now();
-    requestAnimationFrame(frame);
-  }
-  setT(reduce?DUR:0);
-  // Play once when the page opens, then again only when the logo is touched or hovered
-  if(document.fonts&&document.fonts.ready){document.fonts.ready.then(play);}
-  else play();
   if(wrap){
-    wrap.addEventListener('pointerenter',play);
-    wrap.addEventListener('touchstart',play,{passive:true});
+    wrap.addEventListener('pointerenter',playHeader);
+    wrap.addEventListener('touchstart',playHeader,{passive:true});
   }
+
+  // Intro: plays on a blank background, then flies into the header and reveals the page
+  const intro=document.getElementById('intro');
+  const page=document.querySelector('.page');
+  function reveal(){
+    if(page)page.classList.remove('pre');
+  }
+  if(!intro||reduce){
+    if(intro)intro.remove();
+    return;
+  }
+  const introLk=document.getElementById('intro-lk');
+  const introBg=document.getElementById('intro-bg');
+  const ic=controller(introLk);
+  const S1=Math.min(0.6,window.innerWidth*0.8/1100);
+  introLk.style.transform=`scale(${S1})`;
+  introLk.style.left=((window.innerWidth-1100*S1)/2)+'px';
+  introLk.style.top=((window.innerHeight-300*S1)/2)+'px';
+  ic.setT(0);
+  if(page)page.classList.add('pre');
+
+  function flyToHeader(){
+    setTimeout(function(){
+      const r=headerRoot.getBoundingClientRect();
+      const S2=r.width/1100;
+      introLk.style.transition='left .55s cubic-bezier(.6,0,.2,1), top .55s cubic-bezier(.6,0,.2,1), transform .55s cubic-bezier(.6,0,.2,1)';
+      introLk.style.left=r.left+'px';
+      introLk.style.top=r.top+'px';
+      introLk.style.transform=`scale(${S2})`;
+      setTimeout(function(){
+        // Landed: swap in the real header logo (same position and size), then reveal the page
+        document.body.classList.remove('intro-on');
+        introLk.style.visibility='hidden';
+        introBg.classList.add('hide');
+        reveal();
+        setTimeout(function(){intro.remove();},950);
+      },560);
+    },120);
+  }
+
+  const go=()=>animate(ic,flyToHeader);
+  if(document.fonts&&document.fonts.ready){document.fonts.ready.then(go);}
+  else go();
 })();
 
 document.addEventListener('click',e=>{if(!e.target.closest('.topbar'))closeMenu();});
